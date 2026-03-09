@@ -150,6 +150,7 @@
             const enemies = [];
             const enemySpeed = 1.2;
             let enemySpawnIntervalMs = 1500;
+            let enemySpawnIntervalMinimun = 500;
             let lastEnemySpawn = 0;
             let health = 100;
             let score = 0;
@@ -314,7 +315,9 @@
                 if (now - lastEnemySpawn >= enemySpawnIntervalMs) {
                     lastEnemySpawn = now;
                     spawnEnemy();
-                    enemySpawnIntervalMs -= 10;
+                    if (enemySpawnIntervalMs > enemySpawnIntervalMinimun) {
+                        enemySpawnIntervalMs -= 10;
+                    }
                 }
 
                 // Update enemies: move toward logo
