@@ -108,7 +108,7 @@
 
 <body>
     <h1><span id="health">Health: 100</span></h1>
-    <h2><span id="score">0</span></h2>
+    <h2><span id="score"></span></h2>
     <div id="arena">
         <div id="projectiles"></div>
         <div id="enemies"></div>
@@ -139,10 +139,10 @@
             //Configs
             let x = 0, y = 0;
             let vx = 0, vy = 0;
-            const friction = 0.994;
+            const friction = 0.93;
             const bounce = 0.92;
             const minSpeed = 0.08;
-            const moveSpeed = 4;
+            const moveSpeed = 5;
             const projectileSpeed = 14;
 
             const keys = { w: false, a: false, s: false, d: false };
