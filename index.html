@@ -144,8 +144,9 @@
             const projectiles = [];
             const enemies = [];
             const enemySpeed = 1.2;
-            const enemySpawnIntervalMs = 1000;
+            let enemySpawnIntervalMs = 1500;
             let lastEnemySpawn = 0;
+            let health = 100;
 
             // --- Dragging (commented out) ---
             // let isDragging = false;
@@ -158,6 +159,7 @@
 
             function flashHit() {
                 logoWrap.classList.add('hit');
+                health -= 25;
                 if (hitTimeout) clearTimeout(hitTimeout);
                 hitTimeout = setTimeout(function () {
                     logoWrap.classList.remove('hit');
@@ -167,8 +169,14 @@
                     hitSnd.currentTime = 0;
                     hitSnd.play().catch(function () {});
                 }
+                if (health <= 0) {
+                    gameOver();
+                }
             }
 
+            function gameOver() {
+                window.location.reload()
+            }
             function getLogoSize() {
                 return { w: logo.offsetWidth, h: logo.offsetHeight };
             }
@@ -300,6 +308,7 @@
                 if (now - lastEnemySpawn >= enemySpawnIntervalMs) {
                     lastEnemySpawn = now;
                     spawnEnemy();
+                    enemySpawnIntervalMs -= 10;
                 }
 
                 // Update enemies: move toward logo
