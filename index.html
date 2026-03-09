@@ -3,12 +3,15 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>被找到了</title>
-
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             height: 100vh;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -16,35 +19,272 @@
             font-family: Arial, Helvetica, sans-serif;
             background: #111;
             color: white;
+            cursor: default;
+            user-select: none;
         }
 
         h1 {
-            margin-bottom: 30px;
-            font-size: 28px;
+            position: fixed;
+            top: 20px;
+            left: 0;
+            right: 0;
+            margin: 0;
+            font-size: 22px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 1;
         }
 
-        img {
+        #arena {
+            position: fixed;
+            inset: 0;
+            top: 60px;
+        }
+
+        #logoWrap {
+            position: absolute;
+            display: inline-block;
+            pointer-events: none;
+            will-change: transform;
+        }
+
+        #logoWrap.dragging {
+            pointer-events: auto;
+            cursor: grab;
+        }
+
+        #logoWrap:active {
+            cursor: grabbing;
+        }
+
+        #logoWrap.hit::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(200, 60, 60, 0.4);
+            pointer-events: none;
+            border-radius: 2px;
+            animation: hitFlash 0.2s ease-out;
+        }
+
+        @keyframes hitFlash {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        #logo {
             width: 200px;
             height: auto;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
+            display: block;
+            pointer-events: none;
         }
     </style>
 </head>
 
 <body>
-    <h1>You solved the puzzle！</h1>
-    <img src="zozo.jpg" alt="Rotating Image" />
-    <h1>请立刻联系小天以获得您的额外奖励！</h1>
+    <div id="arena">
+        <div id="logoWrap">
+            <img id="logo" src=".\assets\zozo.jpg" alt="Zozo" draggable="false" />
+        </div>
+    </div>
+    <audio id="hitSnd" preload="auto"></audio>
+
+    <script>
+        (function () {
+            const arena = document.getElementById('arena');
+            const logoWrap = document.getElementById('logoWrap');
+            const logo = document.getElementById('logo');
+            const hitSnd = document.getElementById('hitSnd');
+            const arenaRect = () => arena.getBoundingClientRect();
+
+            hitSnd.src = 'assets/collision.mp3';
+
+            //Configs
+            let x = 0, y = 0;
+            let vx = x, vy = y;
+            const friction = 0.994;
+            const bounce = 0.92;
+            const minSpeed = 0.08;
+
+            let isDragging = false;
+            let dragStartX = 0, dragStartY = 0;
+            let dragStartLogoX = 0, dragStartLogoY = 0;
+            const dragHistory = [];
+            const dragHistoryMax = 8;
+            const throwStrength = 0.1;
+            let hitTimeout = null;
+
+            function flashHit() {
+                logoWrap.classList.add('hit');
+                if (hitTimeout) clearTimeout(hitTimeout);
+                hitTimeout = setTimeout(function () {
+                    logoWrap.classList.remove('hit');
+                    hitTimeout = null;
+                }, 200);
+                if (hitSnd.src) {
+                    hitSnd.currentTime = 0;
+                    hitSnd.play().catch(function () {});
+                }
+            }
+
+            function getLogoSize() {
+                return { w: logo.offsetWidth, h: logo.offsetHeight };
+            }
+
+            function clampPosition() {
+                const r = arenaRect();
+                const { w, h } = getLogoSize();
+                const pad = 2;
+                const left = pad;
+                const right = r.width - w - pad;
+                const top = pad;
+                const bottom = r.height - h - pad;
+
+                if (x < left) {
+                    x = left;
+                    if (vx < 0) {
+                        console.log('Hit border: left');
+                        flashHit();
+                    }
+                    vx = -vx * bounce;
+                }
+                if (x > right) {
+                    x = right;
+                    if (vx > 0) {
+                        console.log('Hit border: right');
+                        flashHit();
+                    }
+                    vx = -vx * bounce;
+                }
+                if (y < top) {
+                    y = top;
+                    if (vy < 0) {
+                        console.log('Hit border: top');
+                        flashHit();
+                    }
+                    vy = -vy * bounce;
+                }
+                if (y > bottom) {
+                    y = bottom;
+                    if (vy > 0) {
+                        console.log('Hit border: bottom');
+                        flashHit();
+                    }
+                    vy = -vy * bounce;
+                }
+            }
+
+            function applyFriction() {
+                const s = Math.hypot(vx, vy);
+                if (s < minSpeed) {
+                    vx = 0;
+                    vy = 0;
+                    return;
+                }
+                vx *= friction;
+                vy *= friction;
+            }
+
+            function setPosition(px, py) {
+                x = px;
+                y = py;
+                logoWrap.style.left = px + 'px';
+                logoWrap.style.top = py + 'px';
+            }
+
+            function initPosition() {
+                const r = arenaRect();
+                const { w, h } = getLogoSize();
+                if (!w || !h) return;
+                x = (r.width - w) / 2;
+                y = (r.height - h) / 2;
+                setPosition(x, y);
+            }
+
+            function tick() {
+                if (isDragging) {
+                    requestAnimationFrame(tick);
+                    return;
+                }
+                applyFriction();
+                x += vx;
+                y += vy;
+                clampPosition();
+                setPosition(x, y);
+                requestAnimationFrame(tick);
+            }
+
+            arena.addEventListener('mousedown', function (e) {
+                const r = arenaRect();
+                const ax = e.clientX - r.left;
+                const ay = e.clientY - r.top;
+                const { w, h } = getLogoSize();
+                if (ax >= x && ax <= x + w && ay >= y && ay <= y + h) {
+                    isDragging = true;
+                    logoWrap.classList.add('dragging');
+                    dragStartX = e.clientX;
+                    dragStartY = e.clientY;
+                    dragStartLogoX = x;
+                    dragStartLogoY = y;
+                    dragHistory.length = 0;
+                    dragHistory.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+                }
+            });
+
+            window.addEventListener('mousemove', function (e) {
+                if (!isDragging) return;
+                const r = arenaRect();
+                const dx = e.clientX - dragStartX;
+                const dy = e.clientY - dragStartY;
+                let nx = dragStartLogoX + dx;
+                let ny = dragStartLogoY + dy;
+                const pad = 2;
+                const right = r.width - getLogoSize().w - pad;
+                const bottom = r.height - getLogoSize().h - pad;
+                nx = Math.max(pad, Math.min(right, nx));
+                ny = Math.max(pad, Math.min(bottom, ny));
+                setPosition(nx, ny);
+                dragHistory.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+                if (dragHistory.length > dragHistoryMax) dragHistory.shift();
+            });
+
+            window.addEventListener('mouseup', function (e) {
+                if (!isDragging) return;
+                isDragging = false;
+                logoWrap.classList.remove('dragging');
+                if (dragHistory.length >= 2) {
+                    const recent = dragHistory[dragHistory.length - 1];
+                    const older = dragHistory[0];
+                    const dt = Math.max(1, recent.t - older.t);
+                    vx = ((recent.x - older.x) / dt) * 16 * throwStrength;
+                    vy = ((recent.y - older.y) / dt) * 16 * throwStrength;
+                }
+                requestAnimationFrame(tick);
+            });
+
+            window.addEventListener('resize', function () {
+                const r = arenaRect();
+                const { w, h } = getLogoSize();
+                const pad = 2;
+                const maxX = Math.max(0, r.width - w - pad);
+                const maxY = Math.max(0, r.height - h - pad);
+                x = Math.max(pad, Math.min(maxX, x));
+                y = Math.max(pad, Math.min(maxY, y));
+                setPosition(x, y);
+            });
+
+            logo.addEventListener('dragstart', function (e) {
+                e.preventDefault();
+            });
+
+            if (logo.complete && logo.naturalWidth) {
+                initPosition();
+            } else {
+                logo.addEventListener('load', initPosition);
+            }
+            requestAnimationFrame(tick);
+        })();
+    </script>
 </body>
 
 </html>
