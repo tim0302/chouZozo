@@ -78,40 +78,62 @@
             display: block;
             pointer-events: none;
         }
+
+        .projectile {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #f55;
+            pointer-events: none;
+            left: 0;
+            top: 0;
+        }
     </style>
 </head>
 
 <body>
     <div id="arena">
+        <div id="projectiles"></div>
         <div id="logoWrap">
             <img id="logo" src=".\assets\zozo.jpg" alt="Zozo" draggable="false" />
         </div>
     </div>
     <audio id="hitSnd" preload="auto"></audio>
+    <audio id="shootSnd" preload="auto"></audio>
 
     <script>
         (function () {
             const arena = document.getElementById('arena');
             const logoWrap = document.getElementById('logoWrap');
             const logo = document.getElementById('logo');
+            const projectilesEl = document.getElementById('projectiles');
             const hitSnd = document.getElementById('hitSnd');
+            const shootSnd = document.getElementById('shootSnd');
             const arenaRect = () => arena.getBoundingClientRect();
 
             hitSnd.src = 'assets/collision.mp3';
+            shootSnd.src = 'assets/shooting.mp3';
 
             //Configs
             let x = 0, y = 0;
-            let vx = x, vy = y;
+            let vx = 0, vy = 0;
             const friction = 0.994;
             const bounce = 0.92;
             const minSpeed = 0.08;
+            const moveSpeed = 4;
+            const projectileSpeed = 14;
 
-            let isDragging = false;
-            let dragStartX = 0, dragStartY = 0;
-            let dragStartLogoX = 0, dragStartLogoY = 0;
-            const dragHistory = [];
-            const dragHistoryMax = 8;
-            const throwStrength = 0.1;
+            const keys = { w: false, a: false, s: false, d: false };
+            const projectiles = [];
+
+            // --- Dragging (commented out) ---
+            // let isDragging = false;
+            // let dragStartX = 0, dragStartY = 0;
+            // let dragStartLogoX = 0, dragStartLogoY = 0;
+            // const dragHistory = [];
+            // const dragHistoryMax = 8;
+            // const throwStrength = 0.1;
             let hitTimeout = null;
 
             function flashHit() {
@@ -202,64 +224,83 @@
             }
 
             function tick() {
-                if (isDragging) {
-                    requestAnimationFrame(tick);
-                    return;
-                }
+                // WASD movement
+                if (keys.w) vy -= moveSpeed * 0.15;
+                if (keys.s) vy += moveSpeed * 0.15;
+                if (keys.a) vx -= moveSpeed * 0.15;
+                if (keys.d) vx += moveSpeed * 0.15;
+
                 applyFriction();
                 x += vx;
                 y += vy;
                 clampPosition();
                 setPosition(x, y);
+
+                // Update projectiles
+                const r = arenaRect();
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const p = projectiles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.el.style.left = p.x + 'px';
+                    p.el.style.top = p.y + 'px';
+                    if (p.x < -20 || p.x > r.width + 20 || p.y < -20 || p.y > r.height + 20) {
+                        p.el.remove();
+                        projectiles.splice(i, 1);
+                    }
+                }
+
                 requestAnimationFrame(tick);
             }
 
             arena.addEventListener('mousedown', function (e) {
+                if (e.button !== 0) return;
+                e.preventDefault();
                 const r = arenaRect();
-                const ax = e.clientX - r.left;
-                const ay = e.clientY - r.top;
+                const mx = e.clientX - r.left;
+                const my = e.clientY - r.top;
                 const { w, h } = getLogoSize();
-                if (ax >= x && ax <= x + w && ay >= y && ay <= y + h) {
-                    isDragging = true;
-                    logoWrap.classList.add('dragging');
-                    dragStartX = e.clientX;
-                    dragStartY = e.clientY;
-                    dragStartLogoX = x;
-                    dragStartLogoY = y;
-                    dragHistory.length = 0;
-                    dragHistory.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+                const cx = x + w / 2;
+                const cy = y + h / 2;
+                const dx = mx - cx;
+                const dy = my - cy;
+                const len = Math.hypot(dx, dy) || 1;
+                const pvx = (dx / len) * projectileSpeed;
+                const pvy = (dy / len) * projectileSpeed;
+                const el = document.createElement('div');
+                el.className = 'projectile';
+                projectilesEl.appendChild(el);
+                projectiles.push({ x: cx - 5, y: cy - 5, vx: pvx, vy: pvy, el: el });
+                if (shootSnd.src) {
+                    shootSnd.currentTime = 0;
+                    shootSnd.play().catch(function () {});
                 }
             });
 
-            window.addEventListener('mousemove', function (e) {
-                if (!isDragging) return;
-                const r = arenaRect();
-                const dx = e.clientX - dragStartX;
-                const dy = e.clientY - dragStartY;
-                let nx = dragStartLogoX + dx;
-                let ny = dragStartLogoY + dy;
-                const pad = 2;
-                const right = r.width - getLogoSize().w - pad;
-                const bottom = r.height - getLogoSize().h - pad;
-                nx = Math.max(pad, Math.min(right, nx));
-                ny = Math.max(pad, Math.min(bottom, ny));
-                setPosition(nx, ny);
-                dragHistory.push({ x: e.clientX, y: e.clientY, t: Date.now() });
-                if (dragHistory.length > dragHistoryMax) dragHistory.shift();
-            });
+            // --- Dragging: mousemove and mouseup commented out ---
+            // window.addEventListener('mousemove', function (e) {
+            //     if (!isDragging) return;
+            //     ...
+            // });
+            // window.addEventListener('mouseup', function (e) {
+            //     if (!isDragging) return;
+            //     ...
+            // });
 
-            window.addEventListener('mouseup', function (e) {
-                if (!isDragging) return;
-                isDragging = false;
-                logoWrap.classList.remove('dragging');
-                if (dragHistory.length >= 2) {
-                    const recent = dragHistory[dragHistory.length - 1];
-                    const older = dragHistory[0];
-                    const dt = Math.max(1, recent.t - older.t);
-                    vx = ((recent.x - older.x) / dt) * 16 * throwStrength;
-                    vy = ((recent.y - older.y) / dt) * 16 * throwStrength;
-                }
-                requestAnimationFrame(tick);
+            window.addEventListener('keydown', function (e) {
+                const k = e.key.toLowerCase();
+                if (k === 'w' || k === 'a' || k === 's' || k === 'd') e.preventDefault();
+                if (k === 'w') keys.w = true;
+                if (k === 'a') keys.a = true;
+                if (k === 's') keys.s = true;
+                if (k === 'd') keys.d = true;
+            });
+            window.addEventListener('keyup', function (e) {
+                const k = e.key.toLowerCase();
+                if (k === 'w') keys.w = false;
+                if (k === 'a') keys.a = false;
+                if (k === 's') keys.s = false;
+                if (k === 'd') keys.d = false;
             });
 
             window.addEventListener('resize', function () {
