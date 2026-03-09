@@ -89,12 +89,27 @@
             left: 0;
             top: 0;
         }
+
+        .enemy {
+            position: absolute;
+            width: 80px;
+            height: auto;
+            pointer-events: none;
+            left: 0;
+            top: 0;
+        }
+        .enemy img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 
 <body>
     <div id="arena">
         <div id="projectiles"></div>
+        <div id="enemies"></div>
         <div id="logoWrap">
             <img id="logo" src=".\assets\zozo.jpg" alt="Zozo" draggable="false" />
         </div>
@@ -108,6 +123,7 @@
             const logoWrap = document.getElementById('logoWrap');
             const logo = document.getElementById('logo');
             const projectilesEl = document.getElementById('projectiles');
+            const enemiesEl = document.getElementById('enemies');
             const hitSnd = document.getElementById('hitSnd');
             const shootSnd = document.getElementById('shootSnd');
             const arenaRect = () => arena.getBoundingClientRect();
@@ -126,6 +142,10 @@
 
             const keys = { w: false, a: false, s: false, d: false };
             const projectiles = [];
+            const enemies = [];
+            const enemySpeed = 1.2;
+            const enemySpawnIntervalMs = 1000;
+            let lastEnemySpawn = 0;
 
             // --- Dragging (commented out) ---
             // let isDragging = false;
@@ -223,6 +243,41 @@
                 setPosition(x, y);
             }
 
+            function spawnEnemy() {
+                const r = arenaRect();
+                const enemyW = 80;
+                const enemyH = 80;
+                const side = Math.floor(Math.random() * 4);
+                let ex, ey;
+                if (side === 0) {
+                    ex = Math.random() * (r.width - enemyW);
+                    ey = -enemyH;
+                } else if (side === 1) {
+                    ex = r.width;
+                    ey = Math.random() * (r.height - enemyH);
+                } else if (side === 2) {
+                    ex = Math.random() * (r.width - enemyW);
+                    ey = r.height;
+                } else {
+                    ex = -enemyW;
+                    ey = Math.random() * (r.height - enemyH);
+                }
+                const el = document.createElement('div');
+                el.className = 'enemy';
+                const img = document.createElement('img');
+                img.src = 'assets/zozoEnemy.jpg';
+                img.alt = 'Enemy';
+                el.appendChild(img);
+                enemiesEl.appendChild(el);
+                el.style.left = ex + 'px';
+                el.style.top = ey + 'px';
+                enemies.push({ x: ex, y: ey, w: enemyW, h: enemyH, el: el });
+            }
+
+            function rectsOverlap(a, b) {
+                return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+            }
+
             function tick() {
                 // WASD movement
                 if (keys.w) vy -= moveSpeed * 0.15;
@@ -236,14 +291,61 @@
                 clampPosition();
                 setPosition(x, y);
 
-                // Update projectiles
                 const r = arenaRect();
+                const { w: logoW, h: logoH } = getLogoSize();
+                const logoRect = { x: x, y: y, w: logoW, h: logoH };
+
+                // Spawn enemies from borders
+                const now = Date.now();
+                if (now - lastEnemySpawn >= enemySpawnIntervalMs) {
+                    lastEnemySpawn = now;
+                    spawnEnemy();
+                }
+
+                // Update enemies: move toward logo
+                const logoCx = x + logoW / 2;
+                const logoCy = y + logoH / 2;
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const e = enemies[i];
+                    const ecx = e.x + e.w / 2;
+                    const ecy = e.y + e.h / 2;
+                    const dx = logoCx - ecx;
+                    const dy = logoCy - ecy;
+                    const len = Math.hypot(dx, dy) || 1;
+                    e.x += (dx / len) * enemySpeed;
+                    e.y += (dy / len) * enemySpeed;
+                    e.el.style.left = e.x + 'px';
+                    e.el.style.top = e.y + 'px';
+
+                    if (rectsOverlap(e, logoRect)) {
+                        flashHit();
+                        e.el.remove();
+                        enemies.splice(i, 1);
+                    }
+                }
+
+                // Update projectiles & projectile vs enemy
                 for (let i = projectiles.length - 1; i >= 0; i--) {
                     const p = projectiles[i];
                     p.x += p.vx;
                     p.y += p.vy;
                     p.el.style.left = p.x + 'px';
                     p.el.style.top = p.y + 'px';
+
+                    const pRect = { x: p.x, y: p.y, w: 10, h: 10 };
+                    let hit = false;
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const e = enemies[j];
+                        if (rectsOverlap(pRect, e)) {
+                            p.el.remove();
+                            projectiles.splice(i, 1);
+                            e.el.remove();
+                            enemies.splice(j, 1);
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (hit) continue;
                     if (p.x < -20 || p.x > r.width + 20 || p.y < -20 || p.y > r.height + 20) {
                         p.el.remove();
                         projectiles.splice(i, 1);
