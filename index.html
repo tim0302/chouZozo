@@ -107,6 +107,8 @@
 </head>
 
 <body>
+    <h1><span id="health">Health: 100</span></h1>
+    <h2><span id="score">0</span></h2>
     <div id="arena">
         <div id="projectiles"></div>
         <div id="enemies"></div>
@@ -126,6 +128,9 @@
             const enemiesEl = document.getElementById('enemies');
             const hitSnd = document.getElementById('hitSnd');
             const shootSnd = document.getElementById('shootSnd');
+            const healthEl = document.getElementById('health');
+            const scoreEl = document.getElementById('score');
+
             const arenaRect = () => arena.getBoundingClientRect();
 
             hitSnd.src = 'assets/collision.mp3';
@@ -147,7 +152,7 @@
             let enemySpawnIntervalMs = 1500;
             let lastEnemySpawn = 0;
             let health = 100;
-
+            let score = 0;
             // --- Dragging (commented out) ---
             // let isDragging = false;
             // let dragStartX = 0, dragStartY = 0;
@@ -160,6 +165,7 @@
             function flashHit() {
                 logoWrap.classList.add('hit');
                 health -= 25;
+                healthEl.innerText = `Health: ${health}`;
                 if (hitTimeout) clearTimeout(hitTimeout);
                 hitTimeout = setTimeout(function () {
                     logoWrap.classList.remove('hit');
@@ -350,6 +356,8 @@
                             projectiles.splice(i, 1);
                             e.el.remove();
                             enemies.splice(j, 1);
+                            score += 10;
+                            scoreEl.innerText = `Score: ${score} pts`;
                             hit = true;
                             break;
                         }
@@ -384,7 +392,7 @@
                 projectiles.push({ x: cx - 5, y: cy - 5, vx: pvx, vy: pvy, el: el });
                 if (shootSnd.src) {
                     shootSnd.currentTime = 0;
-                    shootSnd.play().catch(function () {});
+                    // shootSnd.play().catch(function () {});
                 }
             });
 
